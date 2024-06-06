@@ -1,0 +1,397 @@
+\documentclass[polish,envcountsect,10pt]{article}
+
+   	\usepackage[T1]{fontenc}
+   	\usepackage{polski}
+    \usepackage{babel}
+	\usepackage{subfigure}
+	\usepackage{graphicx}
+	\usepackage{geometry}
+	\usepackage{wrapfig}
+    \usepackage{float}
+	
+\title{Pamięć masowa w Kubernetesie}
+
+\author{inż. Wojciech Baranowski, 184574 \and inż. Michał Łubiński, 184603}
+
+\date{\today}
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Ephemeral storage}
+
+\subsection{Definicja}
+
+Pamięć efemeryczna jest tymczasowa i związana bezpośrednio z instancją maszyny wirtualnej (VM). Oto kluczowe cechy i zastosowania pamięci efemerycznej:
+
+\begin{itemize}
+    \item \textbf{Tymczasowość}: Dane przechowywane w pamięci efemerycznej są usuwane po zatrzymaniu, ponownym uruchomieniu lub usunięciu instancji VM. Przykładem może być lokalny dysk twardy maszyny wirtualnej.
+    \item \textbf{Wysoka wydajność}: Często używana do przechowywania danych, które wymagają szybkiego dostępu.
+    \item \textbf{Koszt}: Zwykle tańsza w porównaniu do pamięci trwałej, co czyni ją ekonomicznym wyborem dla danych krótkoterminowych.
+    \item \textbf{Brak trwałości}: Nie jest przeznaczona do przechowywania danych, które muszą przetrwać restart lub usunięcie instancji.
+\end{itemize}
+
+\subsubsection{Przykładowe zastosowania}
+
+\begin{itemize}
+    \item Tymczasowe przechowywanie danych sesji w aplikacjach internetowych.
+    \item Pliki tymczasowe generowane podczas obliczeń i analizy danych.
+    \item Cache aplikacji, które mogą być łatwo odtworzone.
+\end{itemize}
+
+\section{Persistent storage}
+
+\subsection{Definicja}
+
+Pamięć trwała jest zaprojektowana do długoterminowego przechowywania danych, niezależnie od stanu instancji VM. Oto jej kluczowe cechy i zastosowania:
+
+\begin{itemize}
+    \item \textbf{Trwałość}: Dane przechowywane w pamięci trwałej przetrwają restart, zatrzymanie i usunięcie instancji VM.
+    \item \textbf{Bezpieczeństwo}: Często oferuje funkcje takie jak szyfrowanie, kopie zapasowe i replikacja w celu zapewnienia bezpieczeństwa i dostępności danych.
+    \item \textbf{Elastyczność}: Może być podłączona do różnych instancji VM, co pozwala na łatwe przenoszenie danych między instancjami.
+    \item \textbf{Koszt}: Zwykle droższa w porównaniu do pamięci efemerycznej, ale zapewnia większą niezawodność i bezpieczeństwo dla danych krytycznych.
+    \item \textbf{Przeznaczenie}: Idealna do przechowywania baz danych, aplikacji o znaczeniu krytycznym, danych użytkowników, plików konfiguracyjnych i innych trwałych danych.
+\end{itemize}
+
+\subsubsection{Przykładowe zastosowania}
+
+\begin{itemize}
+    \item Bazy danych.
+    \item Systemy plików przechowujące dane użytkowników (np. zdjęcia, dokumenty).
+    \item Kopie zapasowe i archiwizacja danych.
+\end{itemize}
+
+\subsection{PersistentVolume (PV)}
+
+\subsubsection{Definicja}
+
+PersistentVolume (PV) to zasób w klastrze Kubernetes, który reprezentuje rzeczywiste wolumeny dyskowe. PV jest niezależny od węzłów klastra, co oznacza, że może być używany przez dowolną instancję aplikacji w klastrze. Kluczowe cechy PV to:
+
+\begin{itemize}
+    \item \textbf{Trwałość}: PV istnieje niezależnie od cykli życia aplikacji, co oznacza, że wolumeny są dostępne nawet po ponownym uruchomieniu aplikacji lub migracji między węzłami klastra.
+    \item \textbf{Dostępność}: Administratorzy mogą dynamicznie przydzielać i konfigurować PV w klastrze, co umożliwia zarządzanie zasobami przechowywania danych na poziomie klastra.
+    \item \textbf{Różnorodność zasobów}: PV może reprezentować różne rodzaje przechowywania danych, takie jak dyski blokowe, NFS, czy chmurowe dyski.
+	\item \textbf{Poziomy dostępu}: PV może być skonfigurowany z różnymi poziomami dostępu, takimi jak \texttt{ReadWriteOnce} (RWO) dla pojedynczego węzła, \texttt{ReadOnlyMany} (ROX) dla wielu węzłów do odczytu, czy \texttt{ReadWriteMany} (RWX) dla wielu węzłów do odczytu i zapisu.
+\end{itemize}
+
+\subsubsection{Przykład}
+
+Poniżej znajduje się przykład definicji persistent volume'a w pliku YAML:
+
+\begin{verbatim}
+apiVersion: "v1"
+kind: "PersistentVolume"
+metadata:
+  name: "test-pv-1"
+  namespace: "zsch"
+  labels:
+    type: "local"
+spec:
+  storageClassName: "manual"
+  capacity:
+    storage: "1Gi"
+  accessModes:
+    - "ReadWriteOnce"
+  hostPath:
+    path: "/mnt/data"
+\end{verbatim}
+
+\noindent W powyższym przykładzie:
+\begin{itemize}
+    \item \textbf{metadata}: Zawiera metadane dla PersistentVolume, takie jak jego nazwa, przestrzeń nazw, czy labelki.
+    \item \textbf{storageClassName}: Określa nazwę klasy pamięci, z której ten wolumen ma korzystać (w tym przypadku pamięć przydzielana jest manualnie poprzez zadeklarowanie ścieżki w systemie plików hosta).
+    \item \textbf{capacity}: Określa pojemność wolumenu (w tym przykładzie 1 gigabajt).
+    \item \textbf{accessModes}: Określa tryby dostępu do wolumenu (w tym przykładzie ReadWriteOnce, czyli możliwy do zapisu i odczytu przez jedną instancję na raz).
+    \item \textbf{hostPath}: określa ścieżkę w systemie plików hosta, w której ma zostać zamontowany zasób.
+\end{itemize}
+
+\subsection{PersistentVolumeClaim (PVC)}
+
+\subsubsection{Definicja}
+
+PersistentVolumeClaim (PVC) jest żądaniem zasobu PV przez aplikację w klastrze Kubernetes. PVC definiuje wymagania dotyczące przechowywania danych dla aplikacji, takie jak rozmiar wolumenu i żądany poziom dostępu. Kluczowe cechy PVC to:
+
+\begin{itemize}
+    \item \textbf{Abstrakcja od zasobów fizycznych}: Aplikacje korzystają z PVC, aby określić swoje wymagania przechowywania danych, niezależnie od konkretnego zasobu PV.
+    \item \textbf{Dynamiczne przydzielanie}: PVC może być dynamicznie powiązany z dostępnymi PV, które spełniają określone kryteria, dzięki czemu aplikacje nie muszą z góry konfigurować zasobów przechowywania danych.
+    \item \textbf{Elastyczność}: Aplikacje mogą używać wielu PVC w klastrze, a PVC może być modyfikowane w trakcie działania aplikacji, co umożliwia dostosowywanie zasobów przechowywania danych do zmieniających się potrzeb aplikacji.
+\end{itemize}
+
+\subsubsection{Przykład}
+
+Poniżej znajduje się przykład definicji persistent volume claim'a w pliku YAML:
+
+\begin{verbatim}
+apiVersion: "v1"
+kind: "PersistentVolumeClaim"
+metadata:
+  name: "test-pvc"
+  namespace: "zsch"
+spec:
+  storageClassName: "manual"
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "2Gi"
+\end{verbatim}
+
+\noindent W powyższym przykładzie:
+\begin{itemize}
+    \item \textbf{metadata}: Zawiera metadane dla PersistentVolumeClaim, takie jak jego nazwa czy przestrzeń nazw.
+    \item \textbf{storageClassName}: Określa nazwę klasy pamięci, z której PVC ma korzystać (w tym przypadku pamięć jest zarządzana manualnie).
+    \item \textbf{accessModes}: Określa tryb dostępu do wolumenu (w tym przykładzie ReadWriteOnce, czyli możliwy do zapisu i odczytu przez jedną instancję na raz).
+    \item \textbf{resources}: Definiuje zasoby żądane przez PVC, w tym rozmiar wolumenu (w tym przykładzie 2 gigabajty).
+\end{itemize}
+
+\section{Storage class}
+
+\subsection{Definicja}
+
+W kubernetesie storage class jest zasobem używanym do dynamicznego provisioningu storage'u. Definiuje on sposób tworzenia persistent volumes za pomocą specyfikacji provisionera, klasy wydajności, parametrów oraz polityk odzysku (reclaim policies). Storage class umożliwia administratorom zdefiniowanie różnych klas pamięci masowej, które mogą być wykorzystywane przez użytkowników w zależności od ich potrzeb. Pozwala to na automatyczne zarządzanie i provisionowanie zasobów storage'u w klastrze.
+
+\noindent Każda storage class posiada następujące atrybuty:
+\begin{itemize}
+    \item \textbf{Provisioner:} Mechanizm, który tworzy volumy. Najpopularniejsze provisionery opisane zostały w rozdziale 4.
+    \item \textbf{Parameters:} Parametry specyficzne dla danego provisionera, które określają szczegóły wolumenów, takie jak typ dysku, rozmiar, poziom redundancji, itp.
+	\item \textbf{Reclaim Policy:} Polityka odzysku  wolumenu, która określa, co zrobić z wolumenem po usunięciu podłączonego do niego persistent volume claim'u . Może to być \texttt{Retain} (zachowanie volumu), \texttt{Delete} (usunięcie volumu) lub \texttt{Recycle} (przywrócenie volumu do stanu pierwotnego).
+	\item \textbf{Binding Mode:} Określa, kiedy wolumen jest provisionowany. \texttt{Immediate} powoduje natychmiastowe provisionowanie volumu, natomiast \texttt{WaitForFirstConsumer} odracza provisionowanie do momentu, kiedy pierwszy pod zażąda zasobu.
+\end{itemize}
+
+\subsection{Przykład}
+
+Poniżej znajduje się przykład definicji storage class w pliku YAML:
+
+\begin{verbatim}
+kind: "StorageClass"
+apiVersion: "storage.k8s.io/v1"
+metadata:
+  name: "longhorn"
+provisioner: "driver.longhorn.io"
+allowVolumeExpansion: true
+reclaimPolicy: "Delete"
+volumeBindingMode: "Immediate"
+parameters:
+  numberOfReplicas: "2"
+  staleReplicaTimeout: "3600"
+  fromBackup: ""
+  fsType: "ext4"
+\end{verbatim}
+
+\noindent W powyższym przykładzie:
+\begin{itemize}
+	\item \textbf{name} - nazwa klasy storage'u (w tym przypadku \texttt{longhorn}).
+	\item \textbf{provisioner:} - provisioner odpowiedzialny za tworzenie wolumenu, w tym przypadku Longhorn (w tym przypadku \texttt{driver.longhorn.io}).
+    \item \textbf{parameters:} - specyficzne parametry dla provisionera, takie jak rodzaj systemu plików (ext4) czy liczba replik (2).
+	\item \textbf{reclaimPolicy:} - polityka odzysku, (w tym przypadku \texttt{delete} - polityka, która usuwa wolumen po usunięciu PVC).
+	\item \textbf{volumeBindingMode:} - parametr decydujący o momencie utworzenia wolumenu (w tym przypadku \texttt{Immediate} - wolumen zostanie utworzony natychmiastowo).
+\end{itemize}
+
+\subsection{Storage blokowy}
+
+\subsubsection{Definicja}
+Storage blokowy odnosi się do przechowywania danych w postaci bloków. Każdy blok jest niezależnie adresowany i może być przechowywany w różnych miejscach.
+
+\subsubsection{Zastosowanie}
+\begin{itemize}
+    \item Zazwyczaj używany do przechowywania danych dla baz danych i systemów wymagających wysokiej wydajności.
+    \item Idealny dla aplikacji o dużej intensywności I/O, takich jak systemy transakcyjne.
+    \item Używany jako podstawowy storage dla maszyn wirtualnych (VM) w środowiskach chmurowych.
+\end{itemize}
+
+\subsubsection{Zalety}
+\begin{itemize}
+    \item \textbf{Wysoka wydajność:} Storage blokowy oferuje bardzo niskie opóźnienia i wysoką przepustowość, co jest kluczowe dla aplikacji wymagających dużej wydajności.
+    \item \textbf{Elastyczność:} Może być łatwo podzielony na partycje i formatowany w dowolny system plików, co daje dużą swobodę w zarządzaniu danymi.
+    \item \textbf{Bezpieczeństwo:} Może być używany z różnymi technologiami szyfrowania, co zwiększa bezpieczeństwo danych.
+\end{itemize}
+
+\subsubsection{Wady}
+\begin{itemize}
+    \item \textbf{Kompleksowość zarządzania:} Zarządzanie storage'em blokowym może być bardziej skomplikowane, wymaga zaawansowanych umiejętności administracyjnych.
+    \item \textbf{Koszty:} Może być droższy w porównaniu do innych form storage'u, szczególnie przy wysokich wymaganiach wydajnościowych.
+\end{itemize}
+
+\subsection{Storage plikowy}
+
+\subsubsection{Definicja}
+Storage plikowy przechowuje dane w postaci plików i katalogów, które są organizowane w strukturze hierarchicznej.
+
+\subsubsection{Zastosowanie}
+\begin{itemize}
+    \item Używany do przechowywania plików w aplikacjach o mniej intensywnych wymaganiach I/O.
+    \item Idealny do współdzielenia plików w sieciach, np. w systemach współdzielenia plików czy serwerach NAS (Network Attached Storage).
+    \item Często stosowany w środowiskach gdzie potrzebna jest współpraca nad plikami, takich jak biura i zespoły projektowe.
+\end{itemize}
+
+\subsubsection{Zalety}
+\begin{itemize}
+    \item \textbf{Łatwość użycia:} Intuicyjna struktura plików i katalogów jest łatwa do zrozumienia i zarządzania.
+    \item \textbf{Współdzielenie danych:} Idealny do środowisk, gdzie pliki muszą być łatwo udostępniane i współdzielone między użytkownikami.
+    \item \textbf{Koszty:} Może być tańszy w porównaniu do storage'u blokowego, szczególnie w aplikacjach o mniejszych wymaganiach wydajnościowych.
+\end{itemize}
+
+\subsubsection{Wady}
+\begin{itemize}
+    \item \textbf{Wydajność:} Storage plikowy zazwyczaj oferuje niższą wydajność w porównaniu do storage'u blokowego, co może być problematyczne dla aplikacji wymagających wysokiej wydajności I/O.
+    \item \textbf{Skalowalność:} Może być mniej skalowalny niż storage blokowy, zwłaszcza w bardzo dużych środowiskach.
+    \item \textbf{Ograniczenia systemów plików:} Jest ograniczony przez specyfikacje systemów plików, co może wpływać na elastyczność i wydajność.
+\end{itemize}
+
+\section{Mechanizmy provisioningowe}
+
+\subsection{Longhorn}
+
+\subsubsection{Charakterystyka}
+
+Longhorn jest rozproszonym systemem przechowywania danych zaprojektowanym specjalnie do działania z Kubernetes. Działa w całości w przestrzeni użytkownika, co oznacza, że nie wymaga modyfikacji jądra systemu operacyjnego. Longhorn oferuje pełną integrację z kubernetesem, co ułatwia zarządzanie wolumenami bezpośrednio z poziomu platformy kubernetes. System automatycznie replikuje dane, zapewniając ich wysoką dostępność. Zarządzanie Longhornem jest intuicyjne dzięki interfejsowi użytkownika (UI) oraz narzędziom wiersza poleceń (CLI). Dodatkowo, Longhorn obsługuje snapshoty i backupy, co umożliwia tworzenie kopii zapasowych oraz przywracanie danych po awarii. Skalowanie systemu jest proste i polega na dodawaniu nowych węzłów do klastra.
+
+\subsubsection{Zalety}
+\begin{itemize}
+    \item Pełna integracja z Kubernetes.
+    \item Prosta konfiguracja i zarządzanie przez UI oraz CLI.
+    \item Automatyczna replikacja danych.
+    \item Obsługa snapshotów i backupów.
+    \item Łatwe skalowanie przez dodawanie nowych węzłów.
+\end{itemize}
+
+\subsubsection{Wady}
+\begin{itemize}
+    \item Może nie być tak wydajny jak natywne rozwiązania działające w przestrzeni jądra.
+    \item Wymaga dodatkowych zasobów na replikację danych.
+\end{itemize}
+
+\subsection{GlusterFS}
+
+\subsubsection{Charakterystyka}
+
+GlusterFS to skalowalny, rozproszony system plików, który umożliwia tworzenie woluminów rozproszonych na wielu serwerach, działających jako jeden spójny system plików. GlusterFS jest idealny do środowisk wymagających wysokiej skalowalności i dostępności. Replikacja i dystrybucja danych są wbudowane w system, co zapewnia ich niezawodność. Zarządzanie GlusterFS może być skomplikowane, ponieważ wymaga manualnej konfiguracji i jest realizowane głównie przez wiersz poleceń (CLI). System obsługuje różne typy wolumenów, takie jak replicated, distributed i striped, co daje elastyczność w zarządzaniu danymi. Dodatkowo, GlusterFS oferuje funkcje snapshotów i samoutrzymywania, co zwiększa jego niezawodność.
+
+\subsubsection{Zalety}
+
+\begin{itemize}
+    \item Wysoka skalowalność.
+    \item Automatyczna replikacja i dystrybucja danych.
+    \item Obsługa różnych typów wolumenów (replicated, distributed, striped).
+    \item Funkcje snapshotów i samoutrzymywania.
+\end{itemize}
+
+\subsubsection{Wady}
+
+\begin{itemize}
+    \item Skomplikowana konfiguracja i zarządzanie.
+    \item Wymaga manualnej konfiguracji.
+    \item Potencjalne problemy z wydajnością w dużych klastrach.
+\end{itemize}
+
+\subsection{Ceph RBD (RADOS Block Device)}
+
+\subsubsection{Charakterystyka}
+
+Ceph RBD jest częścią systemu Ceph i oferuje blokowy dostęp do przechowywania danych. Ceph jest rozproszonym systemem przechowywania danych, który zapewnia wysoką wydajność, skalowalność i dostępność. Ceph RBD umożliwia tworzenie urządzeń blokowych dostępnych przez sieć, co jest idealne dla aplikacji wymagających dużej wydajności, takich jak bazy danych czy maszyny wirtualne. System automatycznie replikuje dane i zarządza uszkodzonymi dyskami, co zapewnia wysoką dostępność i niezawodność. Zarządzanie Ceph RBD jest realizowane przez kompleksową konfigurację i narzędzia wiersza poleceń (CLI). Dodatkowo, Ceph RBD obsługuje snapshoty i klonowanie wolumenów, co ułatwia zarządzanie kopiami zapasowymi i wdrażanie nowych aplikacji.
+
+\subsubsection{Zalety}
+
+\begin{itemize}
+    \item Wysoka wydajność i skalowalność.
+    \item Automatyczna replikacja i zarządzanie uszkodzonymi dyskami.
+    \item Obsługa snapshotów i klonowania wolumenów.
+    \item Idealny dla aplikacji wymagających dużej wydajności (bazy danych, VM).
+\end{itemize}
+
+\subsubsection{Wady}
+
+\begin{itemize}
+    \item Kompleksowa konfiguracja i zarządzanie.
+    \item Wymaga zaawansowanej wiedzy technicznej.
+    \item Może być zasobożerny.
+\end{itemize}
+
+\subsection{Ceph FS (Ceph Filesystem)}
+
+\subsubsection{Charakterystyka}
+
+Ceph FS to rozproszony system plików będący częścią ekosystemu Ceph. Umożliwia tworzenie rozproszonych systemów plików dostępnych przez sieć, co jest idealne dla aplikacji wymagających współdzielonego dostępu do plików. Ceph FS zapewnia wysoką skalowalność i elastyczność, umożliwiając łatwe dodawanie nowych zasobów do systemu. System automatycznie replikuje dane i zarządza ich dostępnością, co zwiększa niezawodność i dostępność danych. Zarządzanie Ceph FS wymaga zaawansowanej konfiguracji i jest realizowane głównie przez wiersz poleceń (CLI). Ceph FS obsługuje również snapshoty i klonowanie, co ułatwia zarządzanie kopiami zapasowymi i wdrażanie nowych aplikacji.
+
+\subsubsection{Zalety}
+
+\begin{itemize}
+    \item Wysoka skalowalność i elastyczność.
+    \item Automatyczna replikacja i zarządzanie dostępnością danych.
+    \item Obsługa snapshotów i klonowania.
+    \item Idealny dla aplikacji wymagających współdzielonego dostępu do plików.
+\end{itemize}
+
+\subsubsection{Wady}
+
+\begin{itemize}
+    \item Skomplikowana konfiguracja i zarządzanie.
+    \item Wymaga zaawansowanej wiedzy technicznej.
+    \item Może być zasobożerny.
+\end{itemize}
+
+\subsection{iSCSI}
+
+\subsubsection{Charakterystyka}
+
+iSCSI (Internet Small Computer System Interface) to protokół umożliwiający przesyłanie poleceń SCSI przez sieć IP. Dzięki temu możliwy jest zdalny dostęp do urządzeń blokowych, co jest powszechnie stosowane w środowiskach korporacyjnych. iSCSI charakteryzuje się wysoką wydajnością i niskimi opóźnieniami, szczególnie w dobrze zarządzanych sieciach. Protokół ten jest szeroko kompatybilny i wspierany przez wiele urządzeń i systemów operacyjnych. Zarządzanie iSCSI wymaga konfiguracji sieciowej i jest realizowane przez wiersz poleceń (CLI). Chociaż iSCSI nie oferuje natywnej replikacji, można ją uzyskać za pomocą dodatkowych narzędzi. iSCSI jest idealne dla aplikacji wymagających wysokiej wydajności i niskiego opóźnienia, takich jak bazy danych czy środowiska wirtualizacji.
+
+\subsubsection{Zalety}
+
+\begin{itemize}
+    \item Wysoka wydajność i niskie opóźnienia.
+    \item Szeroka kompatybilność i wsparcie.
+    \item Idealny dla aplikacji wymagających wysokiej wydajności (bazy danych, wirtualizacja).
+\end{itemize}
+
+\subsubsection{Wady}
+
+\begin{itemize}
+    \item Wymaga konfiguracji sieciowej i zarządzania.
+    \item Brak natywnej replikacji (wymaga dodatkowych narzędzi).
+    \item Potencjalne problemy z dostępnością i niezawodnością w przypadku awarii sieci.
+\end{itemize}
+
+\subsection{Porównanie}
+
+W celu porównania wydajności poszczególnych rozwiązań wykorzystany został klaster kubernetesowy złożony z trzech węzłów typu master i szesnastu węzłów typu worker. Na klastrze zostały uruchomione poszczególne rozwiązania (Longhorn, GlusterFS, Ceph RBD, CephFS). Do testów posłużyła baza danych SQLite, dla której podmontowano persistent volume claim'a o polityce dostępu wskazanej dla danego rodzaju storage'u (RWO dla blokowego i RWX dla plikowego). Na bazie dokonywano operacji I/O równolegle przez 1, 2, 4 i 8 wątków. Proces testowania orkiestrowany był przy pomocy narzędzia Phoronix Test Suite. Poniższa tabela przedstawia rezultaty:
+
+\begin{center}
+	\begin{tabular}{ | c | c | c | c | c | } 
+    \hline
+	Liczba wątków & Longhorn & GlusterFS & Ceph RBD & CephFS \\
+	\hline
+	1 & 238.461 & 380.979 & 173.766 & 186.274 \\
+	\hline
+	2 & 433.586 & 377.084 & 365.782 & 207.837 \\
+	\hline
+	4 & 616.192 & 422.790 & 477.536 & 229.304 \\
+	\hline
+	8 & 905.618 & 737.335 & 603.924 & 286.458 \\
+	\hline
+\end{tabular}
+\end{center}
+
+Z pomocą powyższych wyników można wyciągnąć następujace wnioski:
+\begin{itemize}
+	\item Storage blokowy wykorzystujący politykę RWO jest wydajniejszy w obsłudze pojedynczego wątku, niż storage plikowy.
+	\item Storage plikowy wykorzystujący politykę RWX jest wydajniejszy w obsłudze wielu wątków, niż storage blokowy.
+	\item Rozwiązania udostępnione przez system Ceph są istotnie wydajniejsze, niż pozostałe provisionery.
+\end{itemize}
+
+\section{Źródła}
+
+\begin{itemize}
+	\item slajdy wykładowe
+	\item materiały udostępnione przez Centrum Usług Informatycznych Politechniki Gdańskiej
+	\item https://kubernetes.io/docs/home/
+	\item https://longhorn.io
+	\item https://www.gluster.org
+	\item https://ceph.io
+	\item https://en.wikipedia.org/wiki/ISCSI
+	\item wiedza własna
+\end{itemize}
+
+\end{document}
